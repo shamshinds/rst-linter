@@ -49,9 +49,28 @@ export const placeholderSnakeCaseRule = {
     while ((match = placeholderRegex.exec(text))) {
       const fullMatch = match[0]; // например, "<IP-ADDRESS>"
       const inner = match[1];     // например, "IP-ADDRESS"
+      const startIdx = match.index; // позиция начала
+      const endIdx = startIdx + fullMatch.length;
 
       // Если уже в snake_case – пропускаем
       if (snakeRegex.test(inner)) {continue;}
+
+      // Если плейсхолдер обернут в апострофы — пропускаем
+      const before = text[startIdx - 1];
+      const after = text[endIdx];
+      if (before === '`' && after === '`') {
+         continue;
+      }
+      
+      // Если плейсхолдер внутри ссылки — пропускаем
+      const prevBacktick = text.lastIndexOf('`', startIdx - 1);
+      const nextBacktick = text.indexOf('`', endIdx);
+      if (prevBacktick !== -1 && nextBacktick !== -1) {
+         const between = text.slice(prevBacktick, nextBacktick + 1);
+         if (!between.includes('\n')) {
+           continue;
+         }
+      }
 
       const start = document.positionAt(match.index);
       const end = document.positionAt(match.index + fullMatch.length);
