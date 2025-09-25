@@ -2,7 +2,7 @@
   "name": "rst-linter",
   "displayName": "rst-linter",
   "description": "Linter and fixer for reStructuredText",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "engines": {
     "vscode": "^1.104.0"
   },
@@ -43,14 +43,7 @@
         "id": "restructuredtext",
         "aliases": ["reST", "reStructuredText"],
         "extensions": [".rst", ".rest", ".rsti"],
-        "configuration": "./language-configuration.json"
-      }
-    ],
-    "grammars": [
-      {
-        "language": "restructuredtext",
-        "scopeName": "text.restructuredtext",
-        "path": "./syntaxes/rst.tmLanguage.json"
+        "configuration": "./syntaxes/language-configuration.json"
       }
     ]
   },
