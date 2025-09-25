@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { ALL_RULES, RstProblem } from './rstLinter';
+import { ALL_RULES } from './rstLinter';
+import { RstProblem } from './types';
 
 export function activate(context: vscode.ExtensionContext) {
   const collection = vscode.languages.createDiagnosticCollection('rstCustom');
@@ -47,11 +48,11 @@ export function activate(context: vscode.ExtensionContext) {
       const uniq = new Map<string, RstProblem>();
       for (const prob of allProblems) {
         const key = `${prob.range.start.line}:${prob.range.start.character}-${prob.range.end.line}:${prob.range.end.character}`;
-        if (!uniq.has(key)) uniq.set(key, prob);
+        if (!uniq.has(key)) {uniq.set(key, prob)};
       }
 
       for (const prob of uniq.values()) {
-        if (!prob.fix) continue;
+        if (!prob.fix) {continue};
         const action = new vscode.CodeAction(`Fix: ${prob.message}`, vscode.CodeActionKind.QuickFix);
         action.command = {
           title: '',
