@@ -204,20 +204,20 @@ export const placeholderSnakeCaseRule = {
   id: 'rst.placeholderSnakeCase',
   message: 'Плейсхолдер должен быть записан в snake_case.',
   /**
-   * Находим подстр вида <…>, проверяем, что содержимое
+   * Находим подстроки вида <…>, проверяем, что содержимое
    * соответствует /^[a-z]+(_[a-z]+)*$/.
-   * Если нет – создаём диагностику и quick‑fix, который заменяет,
+   * Если нет – создаём диагностику и quick‑fix, который заменяет
    * например, <IP-ADDRESS> → <ip_address>, <IpAddress> → <ip_address>.
    */
   check(document: vscode.TextDocument): RstProblem[] {
     const problems: RstProblem[] = [];
     const text = document.getText();
 
-    // ищем любые символы, кроме <> внутри угловых скобок
+    // Регулярка ищет любые символы, кроме <> внутри угловых скобок
     const placeholderRegex = /<([^<>]+)>/g;
     let match: RegExpExecArray | null;
 
-    // проверка «правильного» snake_case
+    // Проверка «правильного» snake_case
     const snakeRegex = /^[a-z]+(_[a-z]+)*$/;
 
     /**
@@ -268,12 +268,11 @@ export const placeholderSnakeCaseRule = {
   },
 };
 
-
 /* -------------------------------------------------------------
    Экспорт всех
    ------------------------------------------------------------- */
 export const ALL_RULES = [
   replaceYoRule,
   sentencePerLineRule,
-  placeholderSnakeCaseRule, // <-- новое правило добавлено в список
+  placeholderSnakeCaseRule,
 ];
