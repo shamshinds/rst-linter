@@ -1,146 +1,116 @@
 import * as vscode from 'vscode';
 import { RstProblem } from './types';
 
-/* -------------------------------------------------------------
-   Правило 2 – каждое предложение должно начинаться с новой строки
-   ------------------------------------------------------------- */
+/**
+ * Правило: каждое предложение должно начинаться с новой строки.
+ *
+ * Особенности:
+ * 1️⃣керы пунктов списков (`#.`, `1.`, `a)`, `*`, `-`, `+`, `>` ) **не считаются
+ *    предложениями**.
+ * 2️⃣ Первое предложение после маркера списка (в том числе во вложенных списках)
+ *    считается корректным и **не подсвечивается**.
+ * 3️⃣ Все последующие предложения в той же строке (как в
+ *    `#. Первое предложение. Второе предложение.`) **подчеркиваются**.
+ * 4️⃣ Для обычных строк (не‑списков) тоже подсвечиваются все предложения,
+ *    кроме первого в строке.
+ * 5️⃣ Quick‑fix переносит ошибочное предложение на новую строку, сохраняя
+ *    текущий уровень отступа (отступ + длина маркера списка, если он есть).
+ */
 export const sentencePerLineRule = {
   id: 'rst.sentencePerLine',
-  message: 'Каждое предложение должно начинаться с новой строки.',
- /**
-   * Алгоритм:
-   *
-   * 1️⃣ Находим все предложения, заканчивающиеся точкой.
-   * 2️⃣ Для каждого предложения, которое **не** стоит в начале строки,
-   *    проверяем   *      • предыдущего предложения находится в той же строке,
-   *      • строка **не** является пунктом списка, **или** это уже не первое
-   *        предложение в пункте списка,
-   *      • если перед предложением только пробелы/табуляции → считаем, что оно
-   *        уже находится на новой строке и пропускаем.
-   * 3️⃣ Если условия выполнены – создаём диагностику и Quick‑Fix,
-   *    который перенос предложение на новую строку, сохраняя правильный отступ
-   *    (для пунктов списка отступ = длина маркера списка).
+  message: 'Каждое предложение должноаться с новой строки.',
+
+  /**
+   * Основная проверка.
    */
   check(document: vscode.TextDocument): RstProblem[] {
     const problems: RstProblem[] = [];
-    const text = document.getText();
 
-    // 1️⃣ Предложения, заканчивающиеся точкой, за которой следует хотя бы один пробел
-    const sentenceRegex = /(.+?\.)\s+/gu;
-    let match: RegExpExecArray | null;
-
-    // Утилита – проверка, что символ является буквой (Unicode)
-    const isLetter = (ch: string) => /\p{L}/u.test(ch);
-
-    // Утилита – проверка, начинается ли строка с маркера списка
-    const listMarkerMatch = (line: string) => {
-      const trimmed = line.trimStart();
-
+    /** -------------------------------------------------------------
+     *  Вспомогательная функция: определяет, начинается ли строка
+     *  с маркера списка. Возвращает объект `{marker, length}`,
+     *  где `length` – длина маркера **включая** завершающий пробел.
+     *  ------------------------------------------------------------- */
+    const listMarkerMatch = (text: string) => {
       const patterns = [
-        /^#\.\s/,               // "#. "
-        /^\d+[.)]\s/,           // "1. "  "2) "
-        /^[a-zA-Z][.)]\s/,      // "a. "  "b) "
-        /^[*\-+>]\s/,           // "* " "- " "+ " "> "
+        /^#\.\s+/,               // "#. "
+        /^\d+[.)]\s+/,           // "1. "  "2) "
+        /^[a-zA-Z][.)]\s+/,      // "a. "  "b) "
+        /^[*\-+>]\s+/,           // "* " "- " "+ " "> "
       ];
       for (const p of patterns) {
-        const m = p.exec(trimmed);
-        if (m) return { marker: m[0], length: m[0].length };
+        const m = p.exec(text);
+        if (m) {
+          return { marker: m[0], length: m[0].length };
+        }
       }
       return null;
     };
 
-    while ((match = sentenceRegex.exec(text))) {
-      const rawStart = match.index;                     // начало предложения (может включать пробелы)
-      const rawEnd = rawStart + match[1].length;        // конец предложения (включая точку)
+    /** -------------------------------------------------------------
+     *  Регулярное выражение, находящее отдельные предложения.
+     *  Мы считаем предложением любую последовательность,
+     *  заканчивающуюся точкой (можно расширить до `!`/`?` при необходимости).
+     *  ------------------------------------------------------------- */
+    const sentenceRegex = /.+?\./g; // «нежадно» до первой точки
 
-      const startPos = document.positionAt(rawStart);
-      const endPos = document.positionAt(rawEnd);
+    // Обходим документ построчно так проще работать с отступами
+    for (let lineNum = 0; lineNum < document.lineCount; lineNum++) {
+      const line = document.lineAt(lineNum);
+      const lineText = line.text;
 
-      // 2️⃣ Предложение уже в начале строки → пропускаем
-      if (startPos.character === 0) continue;
+      // Пустые строки – пропускаем
+      if (lineText.trim() === '') continue;
 
-      // -------------------------------------------------
-      // 2.1️⃣ Предыдущее предложение находится в той же строке?
-      // -------------------------------------------------
-      let prevIdx = rawStart - 1;
-      while (prevIdx >= 0 && /\s/.test(text[prevIdx])) prevIdx--;
-      if (prevIdx < 0) continue; // нет предыдущего текста
+      // Находим количество ведущих пробелов (отступ)
+      const leadingSpaces = lineText.search(/\S|$/); // индекс первого НЕ‑пробела
 
-      const prevLine = document.positionAt(prevIdx).line;
-      if (prevLine !== startPos.line) {
-        // Предложение уже перенесено → пропускаем
-        continue;
+      // Текст без начального отступа
+      const trimmed = lineText.slice(leadingSpaces);
+
+      // Проверяем, есть ли маркер списка в начале строки
+      const markerInfo = listMarkerMatch(trimmed);
+      const contentStartInLine = leadingSpaces + (markerInfo?.length ?? 0);
+      const content = lineText.slice(contentStartInLine);
+
+      // Если в оставшейся части строки нет точек – ничего не проверяем
+      if (!content.includes('.')) continue;
+
+      // Ищем все предложения в этой части строки
+      let match: RegExpExecArray | null;
+      let sentenceIndex = 0; // 1‑й найденный – «первое» предложение
+
+      while ((match = sentenceRegex.exec(content))) {
+        sentenceIndex++;
+
+        // Первое предложение в строке (или первое после маркера) – ОК
+        if (sentenceIndex === 1) continue;
+
+        const sentenceStartInLine = contentStartInLine + match.index;
+        const sentenceEndInLine = contentStartInLine + match[0].length;
+
+        const range = new vscode.Range(
+          new vscode.Position(lineNum, sentenceStartInLine),
+          new vscode.Position(lineNum, sentenceEndInLine)
+        );
+
+        // Текст предложения без лишних пробелов (для quick‑fix)
+        const sentenceText = match[0].trim();
+        
+        // Вычисляем отступ, который нужно сохранить при переносе:
+        //   отступ строки + длина маркера списка (если есть)
+        const indent = leadingSpaces + (markerInfo?.length ?? 0);
+
+        problems.push({
+          range,
+          message: sentencePerLineRule.message,
+          ruleId: sentencePerLineRule.id,
+          fix(edit) {
+            const newText = '\n' + ' '.repeat(indent) + sentenceText;
+            edit.replace(range, newText);
+          },
+        });
       }
-
-      // -------------------------------------------------
-      // 2.2️⃣ Обрабатываем строки‑списки
-      // -------------------------------------------------
-      const lineStartOffset = document.offsetAt(new vscode.Position(startPos.line, 0));
-      const lineText = text.slice(
-        lineStartOffset,
-        document.offsetAt(new vscode.Position(startPos.line, Number.MAX_SAFE_INTEGER))
-      );
-
-      const listInfo = listMarkerMatch(lineText);
-      if (listInfo) {
-        // Нужно понять, первое это предложение в пункте списка или нет.
-        // Проверяем наличие точки **после** маркера списка.
-        const afterMarkerIdx = lineStartOffset + listInfo.length;
-        const betweenMarkerAndSentence = text.slice(afterMarkerIdx, rawStart);
-        if (!betweenMarkerAndSentence.includes('.')) {
-          // Это первое предложение в пункте списка → пропускаем
-          continue;
-        }
-        //наче это уже второе (или последующее) предложение – продолжаем проверку
-      }
-
-      // -------------------------------------------------
-      // 2.3️⃣ Если перед предложением только отступ (пробелы/уляции) – считаем, что оно уже на новой строке
-      // -------------------------------------------------
-      const prefix = text.slice(lineStartOffset, rawStart);
-      if (/^[ \t]*$/.test(prefix)) continue;
-
-      // -------------------------------------------------
-      // 3️⃣ Формируем диапазон, который будем заменять
-      // -------------------------------------------------
-      // Захватываем все пробельныеы (включая возможный перевод строки)
-      // перед предлож, чтобы они исчезли после вставки `\n` + отступ.
-      let fixStartIdx = rawStart;
-      while (fixStartIdx > 0 && /\s/.test(text[fixStartIdx - 1])) fixStartIdx--;
-
-      const fixStartPos = document.positionAt(fixStartIdx);
-      const fixEndPos = document.positionAt(rawEnd);
-      const fixRange = new vscode.Range(fixStartPos, fixEndPos);
-
-      // Текст предложения без лишних пробелов
- const sentenceText = text.slice(rawStart, rawEnd).trim();
-
-      // -------------------------------------------------
-      // 4️⃣ Вычисляем отступ который нужен перед предложением
-      // -------------------------------------------------
- let indent = 0;
-      if (listInfo) {
-        // Для пунктов списка отступ = длина маркера (включая пробел после него)
-        indent = listInfo.length;
-      } else {
-        // Обычный отступ – количество пробелов от начала строки до первого НЕ‑пробельного символа
-        for (let i = lineStartOffset; i < rawStart; i++) {
-          if (!/\s/.test(text[i])) {
-            indent = i - lineStartOffset;
-            break;
-          }
-        }
-      }
-
-      problems.push({
-        range: fixRange,
-        message: sentencePerLineRule.message,
-        ruleId: sentencePerLineRule.id,
-        fix(edit) {
-          const newText = '\n' + ' '.repeat(indent) + sentenceText;
-          edit.replace(fixRange, newText);
-        },
-      });
     }
 
     return problems;

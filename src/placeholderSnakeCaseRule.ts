@@ -56,11 +56,11 @@ export const placeholderSnakeCaseRule = {
       if (snakeRegex.test(inner)) {continue;}
 
       // Если плейсхолдер обернут в апострофы — пропускаем
-      const before = text[startIdx - 1];
-      const after = text[endIdx];
-      if (before === '`' && after === '`') {
-         continue;
-      }
+      //const before = text[startIdx - 1];
+      //const after = text[endIdx];
+      //if (before === '`' && after === '`') {
+      //   continue;
+      //}
       
       // Если плейсхолдер внутри ссылки — пропускаем
       const prevBacktick = text.lastIndexOf('`', startIdx - 1);
